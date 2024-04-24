@@ -1,0 +1,7 @@
+.venv
+metadata/data/
+metadata/insightface/models
+volumes
+embedEtcd.yaml
+standalone_embed.sh
+
