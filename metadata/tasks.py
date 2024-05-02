@@ -11,7 +11,12 @@ import uuid
 import sys
 import numpy as np
 from mtcnn import MTCNN
+from datetime import datetime
+from io import BytesIO
+from uuid import uuid4
 import torchvision.transforms as transforms
+from minio import Minio
+import io
 import torchvision.models as models
 from torchvision.models import ResNet50_Weights
 from PIL import Image
@@ -35,6 +40,12 @@ rec_model_path = '/root/eTanuReincarnation/metadata/insightface/models/w600k_mbf
 detector = MTCNN(steps_threshold=[0.7, 0.8, 0.9], min_face_size=40)
 rec_model = model_zoo.get_model(rec_model_path)
 rec_model.prepare(ctx_id=0)
+minio_client = Minio(
+    endpoint='192.168.122.101:9000',
+    access_key='minioadmin',
+    secret_key='minioadmin',
+    secure=False  # Set to True if using HTTPS
+)
 
 
 def image_to_base64(image_path):
@@ -42,6 +53,28 @@ def image_to_base64(image_path):
         image_data = f.read()
         base64_encoded = base64.b64encode(image_data).decode('utf-8')
         return base64_encoded
+
+
+def upload_image_to_minio(image_data, bucket_name, content_type):
+    try:
+        # Create BytesIO object from image data
+        image_stream = BytesIO(image_data)
+
+        # Generate unique object name using uuid4()
+        object_name = str(uuid4()) + content_type.replace('image/',
+                                                          '.')  # Example: '7f1d18a4-2c0e-47d3-afe1-6d27c3b9392e.png'
+
+        # Upload image to MinIO
+        minio_client.put_object(
+            bucket_name,
+            object_name,
+            image_stream,
+            len(image_data),
+            content_type=content_type  # Change content type based on image format
+        )
+        return object_name
+    except Exception as err:
+        print(f"MinIO Error: {err}")
 
 
 def get_image_metadata(image_path):
@@ -119,7 +152,7 @@ def process_image(image_path, collection_name):
     face = Face(bbox=bbox, kps=kps, det_score=det_score)
 
     embedding = convert_image_to_embeddingv2(image_rgb, face)
-    base64_string = image_to_base64(image_path)
+    # need to upload to minio (base64 to switch with minio)
     metadata = get_image_metadata(image_path)
 
     # Generate UUID for the embedding
@@ -136,13 +169,17 @@ def process_image(image_path, collection_name):
             surname, first_name = name_components
             patronymic = ""
 
+    bucket_name = 'photos'
+
+    uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/png')
+
     Metadata.objects.create(
         vector_id=embedding_id,
-        iin=metadata['info']['IIN'].replace('"',''),
+        iin=None,
         firstname=first_name,
         surname=surname,
         patronymic=patronymic,
-        photo=base64_string
+        photo=uploaded_object_name
     )
 
     data = [
@@ -153,3 +190,68 @@ def process_image(image_path, collection_name):
     collection.insert(data)
     client.flush([collection_name])
     print(f"Done: {image_path}")
+
+
+@shared_task
+def process_image_from_row(row_data, collection_name):
+    connections.connect(
+        alias="default",
+        host=MILVUS_HOST,
+        port=MILVUS_PORT
+    )
+
+    collection = Collection(collection_name)
+    hex_photo = row_data['photo']
+
+    hex_values = hex_photo.replace('\\x', '').split('\\')
+    # Convert hex values to byte array
+    image_data = bytearray.fromhex(''.join(hex_values))
+    # Convert bytes to numpy array
+    image_np = np.asarray(image_data, dtype=np.uint8)
+    # Decode the image using OpenCV
+    image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
+    # Convert BGR to RGB
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    faces = detector.detect_faces(image_rgb)
+    bbox = faces[0]['box']
+    det_score = faces[0]['confidence']
+    kps_dict = faces[0]['keypoints']
+    kps = np.array([list(kps_dict.values())]).squeeze()
+
+    face = Face(bbox=bbox, kps=kps, det_score=det_score)
+
+    embedding = convert_image_to_embeddingv2(image_rgb, face)
+    # need to upload to minio (base64 to switch with minio)
+
+    # Generate UUID for the embedding
+    embedding_id = str(uuid.uuid4())
+    first_name = row_data['FIRSTNAME']
+    surname = row_data['SURNAME']
+    patronymic = row_data['SECONDNAME']
+    iin = row_data['iin']
+    birthdate = row_data['BIRTH_DATE']
+    birthdate = datetime.strptime(birthdate, '%Y/%m/%d')
+    # Format the date in the desired format
+    reformatted_birthdate = birthdate.strftime('%Y-%m-%d')
+    bucket_name = 'photos'
+
+    uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/png')
+
+    Metadata.objects.create(
+        vector_id=embedding_id,
+        iin=iin,
+        firstname=first_name,
+        surname=surname,
+        patronymic=patronymic,
+        birthdate=reformatted_birthdate,
+        photo=uploaded_object_name
+    )
+
+    data = [
+        [embedding_id],
+        [embedding]
+    ]
+
+    collection.insert(data)
+    client.flush([collection_name])
+    print(f"Done: {row_data['iin']}")

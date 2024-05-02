@@ -13,8 +13,17 @@ from insightface.model_zoo import model_zoo
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import math
+from rest_framework.decorators import authentication_classes, permission_classes
+import pytz
+from rest_framework.permissions import IsAuthenticated
+import base64
+from django.contrib.auth.models import User
+from collections import Counter
+from datetime import datetime, timedelta
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import AuthenticationFailed
 from PIL import Image
-from metadata.models import Metadata
+from metadata.models import Metadata, SearchHistory, Account
 
 detector = MTCNN(steps_threshold=[0.7, 0.8, 0.9], min_face_size=40)
 milvus = Milvus(host='localhost', port='19530')
@@ -25,9 +34,31 @@ connections.connect(
 rec_model_path = '/root/eTanuReincarnation/metadata/insightface/models/w600k_mbf.onnx'
 rec_model = model_zoo.get_model(rec_model_path)
 rec_model.prepare(ctx_id=0)
-collection = Collection('face_embeddings02')
-collection.load()
 
+
+# collection = Collection('face_embeddings02')
+# collection.load()
+
+def upload_image_to_minio(image_data, bucket_name, content_type):
+    try:
+        # Create BytesIO object from image data
+        image_stream = BytesIO(image_data)
+
+        # Generate unique object name using uuid4()
+        object_name = str(uuid4()) + content_type.replace('image/',
+                                                          '.')  # Example: '7f1d18a4-2c0e-47d3-afe1-6d27c3b9392e.png'
+
+        # Upload image to MinIO
+        minio_client.put_object(
+            bucket_name,
+            object_name,
+            image_stream,
+            len(image_data),
+            content_type=content_type  # Change content type based on image format
+        )
+        return object_name
+    except Exception as err:
+        print(f"MinIO Error: {err}")
 
 
 def search_faces_in_milvus(embedding, limit):
@@ -54,12 +85,14 @@ def convert_image_to_embeddingv2(img, face):
 
 
 @csrf_exempt
+@permission_classes([IsAuthenticated])
+@authentication_classes([JWTAuthentication])
 def process_image(request):
     if request.method == 'POST' and request.FILES.get('image'):
         # Get the uploaded image file and the limit parameter from the request
         image_file = request.FILES['image']
-        limit = int(request.POST.get('limit', 10))  # Default limit is 10 if not provided
-
+        limit = int(request.POST.get('limit', 5))  # Default limit is 10 if not provided
+        user_id = request.POST.get('auth_user_id')
         # Read the image file and convert it to an OpenCV format
         image_data = image_file.read()
         nparr = np.frombuffer(image_data, np.uint8)
@@ -116,6 +149,20 @@ def process_image(request):
                 'milvus_results': milvus_results
             }
             face_results.append(face_result)
+
+        bucket_name = 'history'
+        with image_file.open('rb') as f:
+            image_data = f.read()
+
+        uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/png')
+        user = User.objects.get(id=user_id)
+        account = Account.objects.get(user=user)
+
+        SearchHistory.objects.create(
+            account=account,
+            searchedPhoto=uploaded_object_name,
+            created_at=datetime.now()
+        )
 
         return JsonResponse({'faces': face_results})
 
