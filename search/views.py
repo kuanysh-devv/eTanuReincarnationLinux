@@ -36,8 +36,8 @@ rec_model = model_zoo.get_model(rec_model_path)
 rec_model.prepare(ctx_id=0)
 
 
-# collection = Collection('face_embeddings02')
-# collection.load()
+collection = Collection('face_embeddings020304')
+collection.load()
 
 def upload_image_to_minio(image_data, bucket_name, content_type):
     try:

@@ -4,4 +4,5 @@ metadata/insightface/models
 volumes
 embedEtcd.yaml
 standalone_embed.sh
-
+venv
+.env

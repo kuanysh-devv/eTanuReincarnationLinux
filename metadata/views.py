@@ -31,7 +31,7 @@ load_dotenv()
 
 MILVUS_HOST = os.environ.get('MILVUS_HOST')
 MILVUS_PORT = os.environ.get('MILVUS_PORT')
-
+csv.field_size_limit(1000000000)
 
 def image_to_base64(image_path):
     with open(image_path, 'rb') as f:
@@ -182,8 +182,8 @@ class MetadataViewSet(viewsets.ModelViewSet):
     def commit(self, request, *args, **kwargs):
         start_time = time.time()
         image_directory = "/root/eTanuReincarnation/metadata/data/test02"
-        csv_path = "C:/Users/User4/PycharmProjects/eTanuReincarnationAPI/output.csv"
-        collection_name = 'face_embeddings02'
+        csv_path = "/root/eTanuReincarnationLinux/metadata/data/photo_02-04.csv"
+        collection_name = 'face_embeddings020304'
 
         import_embeddings_from_csv(csv_path, collection_name)
 
