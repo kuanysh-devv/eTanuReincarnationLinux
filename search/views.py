@@ -31,13 +31,20 @@ connections.connect(
     host='localhost',
     port='19530'
 )
+minio_client = Minio(
+    endpoint='192.168.122.101:9000',
+    access_key='minioadmin',
+    secret_key='minioadmin',
+    secure=False  # Set to True if using HTTPS
+)
+
 rec_model_path = '/root/eTanuReincarnation/metadata/insightface/models/w600k_mbf.onnx'
 rec_model = model_zoo.get_model(rec_model_path)
 rec_model.prepare(ctx_id=0)
 
-
 collection = Collection('face_embeddings020304')
 collection.load()
+
 
 def upload_image_to_minio(image_data, bucket_name, content_type):
     try:
