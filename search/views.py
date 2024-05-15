@@ -7,6 +7,11 @@ from facenet_pytorch import InceptionResnetV1
 from pymilvus import Milvus, DataType, Collection, connections
 import numpy as np
 from minio import Minio
+<<<<<<< HEAD
+=======
+from io import BytesIO
+from uuid import uuid4
+>>>>>>> 037c53c28171cab91279ecb1ce7cc30f0f654489
 import torch
 import insightface
 from insightface.app.common import Face
@@ -140,7 +145,7 @@ def process_image(request):
             milvus_results = [{'vector_id': vector_id, 'distance': round(dist, 5)} for vector_id, dist in
                               zip(vector_ids, distances)]
             metadata_list = [{'vector_id': obj.vector_id, 'iin': obj.iin, 'name': obj.firstname, 'surname': obj.surname,
-                              'patronymic': obj.patronymic, 'photo': obj.photo} for obj in metadata_objects]
+                              'patronymic': obj.patronymic, 'birth_date': obj.birthdate,  'photo': obj.photo} for obj in metadata_objects]
 
             # Associate metadata with Milvus results based on vector ID
             for milvus_result in milvus_results:
