@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from metadata.views import *
 from rest_framework import routers
 from metadata.views import CustomTokenObtainPairView
-from search.views import process_image
+from search.views import SearchView
 
 
 router = routers.DefaultRouter()
@@ -21,5 +21,5 @@ urlpatterns = [
     path('api/v1/commit-photos/', MetadataViewSet.as_view({'get': 'commit'}), name='commitPhotos'),
     path('api/v1/getUserInfo/', AccountViewSet.as_view({'post': 'getUserInfo'}), name='getUserInfo'),
     path('api/v1/register/', register, name='register'),
-    path('api/v1/search/', process_image, name='process_image'),
+    path('api/v1/search/', SearchView.as_view(), name='process_image'),
 ]
