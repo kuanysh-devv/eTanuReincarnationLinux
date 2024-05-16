@@ -15,11 +15,14 @@ import torch
 from rest_framework.parsers import MultiPartParser, FormParser
 import insightface
 from insightface.app.common import Face
+from io import BytesIO
 from insightface.model_zoo import model_zoo
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import math
 from rest_framework.decorators import authentication_classes, permission_classes, action
+from rest_framework.decorators import authentication_classes, permission_classes
+from uuid import uuid4
 import pytz
 from rest_framework.permissions import IsAuthenticated
 import base64
@@ -38,7 +41,7 @@ connections.connect(
     port='19530'
 )
 minio_client = Minio(
-    endpoint='192.168.122.101:9000',
+    endpoint='localhost:9000',
     access_key='minioadmin',
     secret_key='minioadmin',
     secure=False  # Set to True if using HTTPS
@@ -56,11 +59,10 @@ def upload_image_to_minio(image_data, bucket_name, content_type):
     try:
         # Create BytesIO object from image data
         image_stream = BytesIO(image_data)
-
+        
         # Generate unique object name using uuid4()
         object_name = str(uuid4()) + content_type.replace('image/',
                                                           '.')  # Example: '7f1d18a4-2c0e-47d3-afe1-6d27c3b9392e.png'
-
         # Upload image to MinIO
         minio_client.put_object(
             bucket_name,
@@ -170,7 +172,7 @@ class SearchView(APIView):
         with image_file.open('rb') as f:
             image_data = f.read()
 
-        uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/png')
+        uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/jpg')
         user = User.objects.get(id=user_id)
         account = Account.objects.get(user=user)
 
