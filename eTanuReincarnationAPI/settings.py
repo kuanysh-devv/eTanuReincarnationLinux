@@ -87,7 +87,8 @@ WSGI_APPLICATION = 'eTanuReincarnationAPI.wsgi.application'
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # Example: Allow requests from this origin
+    "http://localhost:3000",
+    "http://192.168.122.101:3000" # Example: Allow requests from this origin
 ]
 
 # Database
