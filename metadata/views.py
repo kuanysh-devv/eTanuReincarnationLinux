@@ -7,6 +7,7 @@ from .tasks import process_image, process_image_from_row
 import cv2
 from django.shortcuts import get_object_or_404
 import torch
+from django.utils.decorators import method_decorator
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import viewsets, status, pagination
@@ -265,6 +266,7 @@ class AccountViewSet(viewsets.ModelViewSet):
 
         return JsonResponse(user_data)
 
+    @method_decorator(csrf_exempt, name='dispatch')
     @action(detail=False, methods=['get'], url_path='history/(?P<auth_user_id>[^/.]+)')
     def get_history(self, request, auth_user_id=None):
         try:
