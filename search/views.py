@@ -187,4 +187,5 @@ class SearchView(APIView):
             created_at=datetime.now()
         )
 
-        return JsonResponse({'faces': face_results})
+        return JsonResponse({'faces': face_results,
+                             'image_name': uploaded_object_name})
