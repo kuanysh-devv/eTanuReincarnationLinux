@@ -110,10 +110,10 @@ class SearchView(APIView):
         limit = int(request.POST.get('limit', 5))  # Default limit is 10 if not provided
         user_id = request.POST.get('auth_user_id')
         reload = request.POST.get('reload')
+        bucket_name = 'history'
 
         if reload == "1":
             image_name = request.POST.get('image_name')
-            bucket_name = 'history'
             image_url = f'http://127.0.0.1:9000/{bucket_name}/{image_name}'
             response = requests.get(image_url)
             image_data = response.content
@@ -146,10 +146,8 @@ class SearchView(APIView):
             face = Face(bbox=bbox, kps=kps, det_score=det_score)
 
             embedding = convert_image_to_embeddingv2(img_rgb, face)
-            print("Starting here")
             # Search for the face in Milvus
             vector_ids, distances = search_faces_in_milvus(embedding, limit)
-            print("Done")
             # Retrieve metadata for each vector ID
             metadata_objects = Metadata.objects.filter(vector_id__in=vector_ids)
 
@@ -178,8 +176,6 @@ class SearchView(APIView):
                 'milvus_results': milvus_results
             }
             face_results.append(face_result)
-
-        bucket_name = 'history'
 
         uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/jpg')
         user = User.objects.get(id=user_id)
