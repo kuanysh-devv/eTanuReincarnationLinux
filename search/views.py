@@ -117,7 +117,6 @@ class SearchView(APIView):
             image_url = f'http://127.0.0.1:9000/{bucket_name}/{image_name}'
             response = requests.get(image_url)
             image_data = response.content
-            print(image_data)
         # Read the image file and convert it to an OpenCV format
         else:
             image_file = request.FILES['image']
