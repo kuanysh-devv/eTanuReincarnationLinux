@@ -29,14 +29,15 @@ from torchvision.models import ResNet50_Weights
 from PIL import Image
 from pymilvus import Milvus, CollectionSchema, FieldSchema, DataType, Collection, connections, utility
 import base64
-from .models import Metadata, Account, SearchHistory
-from .serializers import MetadataSerializer, AccountSerializer, CustomTokenObtainPairSerializer
+from .models import Person, Account, SearchHistory, Gallery
+from .serializers import PersonSerializer, AccountSerializer, CustomTokenObtainPairSerializer
 
 load_dotenv()
 
 MILVUS_HOST = os.environ.get('MILVUS_HOST')
 MILVUS_PORT = os.environ.get('MILVUS_PORT')
 csv.field_size_limit(1000000000)
+
 
 def image_to_base64(image_path):
     with open(image_path, 'rb') as f:
@@ -178,9 +179,9 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
 
-class MetadataViewSet(viewsets.ModelViewSet):
-    queryset = Metadata.objects.all()
-    serializer_class = MetadataSerializer
+class PersonViewSet(viewsets.ModelViewSet):
+    queryset = Person.objects.all()
+    serializer_class = PersonSerializer
     permission_classes = (IsAuthenticated,)
 
     @action(detail=False, methods=['get'])

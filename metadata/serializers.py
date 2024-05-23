@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import Metadata, Account
+from .models import Person, Account, Gallery
 from django.contrib.auth.models import User
 
 from .models import Metadata
@@ -18,13 +18,19 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         fields = ('access', 'refresh', 'auth_user_id')  # Include fields needed in the response
 
 
-class MetadataSerializer(serializers.ModelSerializer):
+class PersonSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Metadata
+        model = Person
         fields = "__all__"
 
 
 class AccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
+        fields = "__all__"
+
+
+class GallerySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Gallery
         fields = "__all__"
