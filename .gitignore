@@ -8,7 +8,10 @@ venv
 .env
 
 # Byte-compiled / optimized / DLL files
-__pycache__/
+eTanuReincarnationAPI/__pycache__/
+metadata/__pycache__/
+metadata/migrations/__pycache__/
+search/__pycache__/
 *.py[cod]
 *$py.class
 
