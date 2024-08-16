@@ -3,8 +3,6 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import Person, Account, Gallery
 from django.contrib.auth.models import User
 
-from .models import Metadata
-
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     auth_user_id = serializers.IntegerField(source='user.id', read_only=True)

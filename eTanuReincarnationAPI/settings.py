@@ -31,7 +31,7 @@ SECRET_KEY = 'django-insecure-28(mknc4iril7s)z!0bxgzul@slp^r_bydyr1^yk8h!g^)(c)a
 DEBUG = True
 
 ALLOWED_HOSTS = [
-  '192.168.122.101'
+  '192.168.122.110'
 ]
 
 
@@ -88,7 +88,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "http://192.168.122.101:3000" # Example: Allow requests from this origin
+    "http://192.168.122.110:3000" # Example: Allow requests from this origin
 ]
 
 # Database

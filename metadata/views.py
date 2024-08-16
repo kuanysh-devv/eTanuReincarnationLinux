@@ -57,18 +57,18 @@ def get_image_metadata(image_path):
     return metadata
 
 
-def import_embeddings_from_csv(csv_path, collection_name):
+def import_embeddings_from_csv(csv_path, partition_name):
     milvus = Milvus(host=MILVUS_HOST, port=MILVUS_PORT)
     connections.connect(
         alias="default",
         host=MILVUS_HOST,
         port=MILVUS_PORT
     )
-
+    collection_name = "face_embeddings"
     # Check if collection exists
     if collection_name in milvus.list_collections():
-        collection = Collection(collection_name)
-        print(f"Collection '{collection_name}' already exists.")
+        collection = Collection("face_embeddings")
+        print(f"Collection already exists.")
     else:
         # Create collection with embedding and id fields
         vector_id = FieldSchema(
@@ -89,7 +89,7 @@ def import_embeddings_from_csv(csv_path, collection_name):
             enable_dynamic_field=True
         )
         collection = Collection(
-            name=collection_name,
+            name="face_embeddings",
             schema=schema,
             using='default'
         )
@@ -108,11 +108,15 @@ def import_embeddings_from_csv(csv_path, collection_name):
         )
 
         utility.index_building_progress(collection_name)
+        if collection.has_partition(partition_name):
+           print("Partition already exists")
+        else:
+           collection.create_partition(partition_name)
 
     with open(csv_path, newline='', encoding='utf-8') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
-            task_result = process_image_from_row.delay(row, collection_name)
+            task_result = process_image_from_row.delay(row, partition_name)
 
 
 def import_embeddings_from_images(image_directory, collection_name):
@@ -188,16 +192,16 @@ class PersonViewSet(viewsets.ModelViewSet):
     def commit(self, request, *args, **kwargs):
         start_time = time.time()
         image_directory = "/root/eTanuReincarnation/metadata/data/test02"
-        csv_path = "/root/eTanuReincarnationLinux/metadata/data/photo_02-04.csv"
-        collection_name = 'face_embeddings020304'
-
-        import_embeddings_from_csv(csv_path, collection_name)
+        csv_path = "/root/eTanuReincarnationLinux/metadata/data/from1970to1974.csv"
+        partition_name = 'from1970to1975'
+  
+        import_embeddings_from_csv(csv_path, partition_name)
 
         end_time = time.time()
         wasted_time = end_time - start_time
 
         print("Request wasted time:", wasted_time)
-
+       
         return JsonResponse({'status': 'Tasks uploaded into celery'})
 
 

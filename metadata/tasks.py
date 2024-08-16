@@ -36,12 +36,12 @@ load_dotenv()
 MILVUS_HOST = os.environ.get('MILVUS_HOST')
 MILVUS_PORT = os.environ.get('MILVUS_PORT')
 client = Milvus(MILVUS_HOST, MILVUS_PORT)
-rec_model_path = '/root/eTanuReincarnation/metadata/insightface/models/w600k_mbf.onnx'
+rec_model_path = '/root/eTanuReincarnationLinux/metadata/insightface/models/w600k_mbf.onnx'
 detector = MTCNN(steps_threshold=[0.7, 0.8, 0.9], min_face_size=40)
 rec_model = model_zoo.get_model(rec_model_path)
 rec_model.prepare(ctx_id=0)
 minio_client = Minio(
-    endpoint='192.168.122.101:9000',
+    endpoint='192.168.122.110:9000',
     access_key='minioadmin',
     secret_key='minioadmin',
     secure=False  # Set to True if using HTTPS
@@ -55,7 +55,7 @@ def image_to_base64(image_path):
         return base64_encoded
 
 
-def upload_image_to_minio(image_data, bucket_name, content_type):
+def upload_image_to_minio(image_data, bucket_name, content_type, directory_name):
     try:
         # Create BytesIO object from image data
         image_stream = BytesIO(image_data)
@@ -64,6 +64,7 @@ def upload_image_to_minio(image_data, bucket_name, content_type):
         object_name = str(uuid4()) + content_type.replace('image/',
                                                           '.')  # Example: '7f1d18a4-2c0e-47d3-afe1-6d27c3b9392e.png'
 
+        object_name = f"{directory_name}/{object_name}"
         # Upload image to MinIO
         minio_client.put_object(
             bucket_name,
@@ -132,14 +133,14 @@ def convert_image_to_embeddingv2(img, face):
 
 
 @shared_task
-def process_image(image_path, collection_name):
+def process_image(image_path, partition_name):
     connections.connect(
         alias="default",
         host=MILVUS_HOST,
         port=MILVUS_PORT
     )
 
-    collection = Collection(collection_name)
+    collection = Collection("face_embeddings")
 
     image = cv2.imread(image_path)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -170,9 +171,8 @@ def process_image(image_path, collection_name):
             patronymic = ""
 
     bucket_name = 'photos'
-
-    uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/png')
-
+    directory_name = partition_name
+    uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/png', directory_name=directory_name)
     Person.objects.create(
         iin=None,
         firstname=first_name,
@@ -185,19 +185,19 @@ def process_image(image_path, collection_name):
         [embedding]
     ]
 
-    collection.insert(data)
-    client.flush([collection_name])
+    collection.insert(data, partition_name=partition_name)
     print(f"Done: {image_path}")
-
+    collection_name = "face_embeddings"
+    client.flush([collection_name])
 
 @shared_task
-def process_image_from_row(row_data, collection_name):
+def process_image_from_row(row_data, partition_name):
     connections.connect(
         alias="default",
         host=MILVUS_HOST,
         port=MILVUS_PORT
     )
-
+    collection_name = "face_embeddings"
     collection = Collection(collection_name)
     hex_photo = row_data['photo']
 
@@ -223,18 +223,17 @@ def process_image_from_row(row_data, collection_name):
 
     # Generate UUID for the embedding
     embedding_id = str(uuid.uuid4())
-    first_name = row_data['FIRSTNAME']
-    surname = row_data['SURNAME']
-    patronymic = row_data['SECONDNAME']
+    first_name = row_data['first_name']
+    surname = row_data['last_name']
+    patronymic = row_data['patronymic']
     iin = row_data['iin']
-    birthdate = row_data['BIRTH_DATE']
-    birthdate = datetime.strptime(birthdate, '%Y/%m/%d')
+    birthdate = row_data['birth_date']
+    birthdate = datetime.strptime(birthdate, '%Y-%m-%d')
     # Format the date in the desired format
     reformatted_birthdate = birthdate.strftime('%Y-%m-%d')
     bucket_name = 'photos'
-
-    uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/png')
-
+    directory_name = partition_name
+    uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/png',directory_name=directory_name)
     if Person.objects.filter(iin=iin).exists():
         existedPerson = Person.objects.get(iin=iin)
 
@@ -263,6 +262,5 @@ def process_image_from_row(row_data, collection_name):
         [embedding]
     ]
 
-    collection.insert(data)
-    client.flush([collection_name])
+    collection.insert(data, partition_name=partition_name)
     print(f"Done: {row_data['iin']}")

@@ -36,10 +36,11 @@ from PIL import Image
 from metadata.models import Person, SearchHistory, Account, Gallery
 
 detector = MTCNN(steps_threshold=[0.7, 0.8, 0.9], min_face_size=40)
-milvus = Milvus(host='localhost', port='19530')
+#milvus = Milvus(host='localhost', port='19530')
 connections.connect(
     host='localhost',
-    port='19530'
+    port='19530',
+    timeout=100000
 )
 minio_client = Minio(
     endpoint='localhost:9000',
@@ -48,15 +49,17 @@ minio_client = Minio(
     secure=False  # Set to True if using HTTPS
 )
 
-rec_model_path = '/root/eTanuReincarnation/metadata/insightface/models/w600k_mbf.onnx'
+rec_model_path = '/root/eTanuReincarnationLinux/metadata/insightface/models/w600k_mbf.onnx'
 rec_model = model_zoo.get_model(rec_model_path)
 rec_model.prepare(ctx_id=0)
 
-collection = Collection('face_embeddings020304')
+collection = Collection('face_embeddings')
 collection.load()
 
 
-def upload_image_to_minio(image_data, bucket_name, content_type):
+
+
+def upload_image_to_minio(image_data, bucket_name, content_type, directory_name):
     try:
         # Create BytesIO object from image data
         image_stream = BytesIO(image_data)
@@ -64,6 +67,7 @@ def upload_image_to_minio(image_data, bucket_name, content_type):
         # Generate unique object name using uuid4()
         object_name = str(uuid4()) + content_type.replace('image/',
                                                           '.')  # Example: '7f1d18a4-2c0e-47d3-afe1-6d27c3b9392e.png'
+        object_name = f"{directory_name}/{object_name}"
         # Upload image to MinIO
         minio_client.put_object(
             bucket_name,
@@ -177,10 +181,9 @@ class SearchView(APIView):
             }
             face_results.append(face_result)
 
-        uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/jpg')
         user = User.objects.get(id=user_id)
         account = Account.objects.get(user=user)
-
+        uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/jpg', directory_name=account.id)
         SearchHistory.objects.create(
             account=account,
             searchedPhoto=uploaded_object_name,

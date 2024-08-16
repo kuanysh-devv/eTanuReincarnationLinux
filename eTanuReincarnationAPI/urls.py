@@ -9,7 +9,7 @@ from search.views import SearchView
 
 router = routers.DefaultRouter()
 router.register(r'person', PersonViewSet)
-router.register(r'metadata', MetadataViewSet)
+router.register(r'account', AccountViewSet)
 
 
 urlpatterns = [
