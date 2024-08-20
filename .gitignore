@@ -7,6 +7,8 @@ standalone_embed.sh
 venv
 .env
 
+.idea/*
+eTanuReincarnationAPI/settings.py
 # Byte-compiled / optimized / DLL files
 eTanuReincarnationAPI/__pycache__/
 metadata/__pycache__/

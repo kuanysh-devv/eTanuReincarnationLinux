@@ -1,34 +1,27 @@
-from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
 import time
+import numpy as np
+from rest_framework.parsers import MultiPartParser
 from .tasks import process_image, process_image_from_row
-import cv2
 from django.shortcuts import get_object_or_404
-import torch
 from django.utils.decorators import method_decorator
-from rest_framework.decorators import action
-from rest_framework.response import Response
 from rest_framework import viewsets, status, pagination
 from django.contrib.auth.models import User
+from mtcnn import MTCNN
 import json
 import os
-import pandas as pd
+import cv2
 import csv
-import uuid
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework_simplejwt.views import TokenObtainPairView
-import io
-import sys
-import numpy as np
 from dotenv import load_dotenv
-import torchvision.transforms as transforms
-import torchvision.models as models
-from torchvision.models import ResNet50_Weights
 from PIL import Image
+from tensorflow.keras.models import load_model
 from pymilvus import Milvus, CollectionSchema, FieldSchema, DataType, Collection, connections, utility
 import base64
+from tensorflow.keras.preprocessing.image import img_to_array
 from .models import Person, Account, SearchHistory, Gallery
 from .serializers import PersonSerializer, AccountSerializer, CustomTokenObtainPairSerializer
 
@@ -36,7 +29,21 @@ load_dotenv()
 
 MILVUS_HOST = os.environ.get('MILVUS_HOST')
 MILVUS_PORT = os.environ.get('MILVUS_PORT')
+detector = MTCNN(steps_threshold=[0.7, 0.8, 0.9], min_face_size=40)
 csv.field_size_limit(1000000000)
+model = load_model('metadata/models/model.h5')
+
+
+def preprocess_frame(frame):
+    # Resize the frame to match the model input size
+    resized_frame = cv2.resize(frame, (150, 150))  # Adjust size according to your model's input size
+
+    # Convert to an array and normalize pixel values
+    image_array = img_to_array(resized_frame)
+    normalized_array = image_array / 255.0
+
+    # Expand dimensions to match the model input shape (batch_size, height, width, channels)
+    return np.expand_dims(normalized_array, axis=0)
 
 
 def image_to_base64(image_path):
@@ -109,12 +116,12 @@ def import_embeddings_from_csv(csv_path, partition_name):
 
         utility.index_building_progress(collection_name)
         if collection.has_partition(partition_name):
-           print("Partition already exists")
+            print("Partition already exists")
         else:
-           collection.create_partition(partition_name)
+            collection.create_partition(partition_name)
 
     with open(csv_path, newline='', encoding='utf-8') as csvfile:
-        reader = csv.DictReader(csvfile)
+        reader = csv.DictReader(csvfile, delimiter=';')
         for row in reader:
             task_result = process_image_from_row.delay(row, partition_name)
 
@@ -179,6 +186,28 @@ def import_embeddings_from_images(image_directory, collection_name):
             process_image.delay(image_path, collection_name)
 
 
+def is_real_face(model_instance, frame):
+    preprocessed_frame = preprocess_frame(frame)
+
+    # Make predictions
+    prediction = model_instance.predict(preprocessed_frame)
+
+    # Assuming binary classification where >0.5 indicates a real face
+    print(prediction[0])
+    return prediction[0] > 0.5
+
+
+def analyze_liveness_with_keras(frames, model_instance):
+    liveness_score = 0
+
+    for frame in frames:
+        if is_real_face(model_instance, frame):
+            liveness_score += 1
+
+    # Adjust the threshold based on your testing
+    return liveness_score >= len(frames) - 2
+
+
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
@@ -191,17 +220,18 @@ class PersonViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def commit(self, request, *args, **kwargs):
         start_time = time.time()
-        image_directory = "/root/eTanuReincarnation/metadata/data/test02"
-        csv_path = "/root/eTanuReincarnationLinux/metadata/data/from1970to1974.csv"
-        partition_name = 'from1970to1975'
-  
+        # image_directory = "/root/eTanuReincarnation/metadata/data/test02"
+        # csv_path = "/root/eTanuReincarnationLinux/metadata/data/from1970to1974.csv"
+        csv_path = "C:/Users/User4/Documents/photos_00-05.csv"
+        partition_name = 'from2000to2005'
+
         import_embeddings_from_csv(csv_path, partition_name)
 
         end_time = time.time()
         wasted_time = end_time - start_time
 
         print("Request wasted time:", wasted_time)
-       
+
         return JsonResponse({'status': 'Tasks uploaded into celery'})
 
 
@@ -240,6 +270,42 @@ def register(request):
     return JsonResponse({'status': 'Упс что-то пошло не так...'})
 
 
+@csrf_exempt
+def authenticate_user(request):
+    if request.method == 'POST':
+        num_frames = int(request.POST.get('num_frames', 0))  # Use request.POST for form data
+        frames = []
+
+        # Iterate over the files
+        for i in range(1, num_frames + 1):  # Adjust to include num_frames
+            file_key = f'frame_{i}'  # Frame keys are 'frame_1', 'frame_2', etc.
+            if file_key in request.FILES:
+                uploaded_file = request.FILES[file_key]
+                frames.append(uploaded_file)
+
+        if not frames:
+            return JsonResponse({'error': 'No frames received'}, status=400)
+
+        # Process frames
+        decoded_frames = []
+        for file in frames:
+            # Convert file to an OpenCV-compatible format
+            image_data = file.read()
+            np_arr = np.frombuffer(image_data, np.uint8)
+            image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            decoded_frames.append(image)
+
+        # Analyze liveness
+        liveness_passed = analyze_liveness_with_keras(decoded_frames, model)
+
+        if liveness_passed:
+            return JsonResponse({'success': 'Liveness detected'}, status=200)
+        else:
+            return JsonResponse({'error': 'Liveness detection failed'}, status=400)
+
+    return JsonResponse({'error': 'Invalid request'}, status=400)
+
+
 class HistoryPagination(pagination.PageNumberPagination):
     page_size = 10  # Set the page size to 10
 
@@ -247,10 +313,12 @@ class HistoryPagination(pagination.PageNumberPagination):
 class AccountViewSet(viewsets.ModelViewSet):
     queryset = Account.objects.all()
     serializer_class = AccountSerializer
+    parser_classes = [MultiPartParser]
     permission_classes = (IsAuthenticated,)
 
     @action(detail=False, methods=['post'])
     def getUserInfo(self, request, *args, **kwargs):
+        user_data = {}
         if request.method == 'POST':
             data = json.loads(request.body.decode('utf-8'))
             user_id = data.get('auth_user_id')

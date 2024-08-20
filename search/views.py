@@ -1,55 +1,63 @@
+import os
 from django.shortcuts import render
 import cv2
 from django.apps import apps
 from mtcnn import MTCNN
-import psycopg2
-from facenet_pytorch import InceptionResnetV1
-from pymilvus import Milvus, DataType, Collection, connections
+from pymilvus import Milvus, DataType, Collection, connections, MilvusClient
 import numpy as np
+import json
 from rest_framework.views import APIView
-from rest_framework import viewsets
 from minio import Minio
 from io import BytesIO
 from uuid import uuid4
-import torch
 import requests
+from .forms import *
 from rest_framework.parsers import MultiPartParser, FormParser
 import insightface
 from insightface.app.common import Face
-from io import BytesIO
 from insightface.model_zoo import model_zoo
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-import math
-from rest_framework.decorators import authentication_classes, permission_classes, action
-from rest_framework.decorators import authentication_classes, permission_classes
-from uuid import uuid4
-import pytz
+from rest_framework.decorators import permission_classes, action
 from rest_framework.permissions import IsAuthenticated
-import base64
 from django.contrib.auth.models import User
-from collections import Counter
-from datetime import datetime, timedelta
-from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework_simplejwt.exceptions import AuthenticationFailed
+from datetime import datetime
 from PIL import Image
-from metadata.models import Person, SearchHistory, Account, Gallery
+import urllib3
+from metadata.models import *
+from dotenv import load_dotenv
+
+MILVUS_HOST = os.environ.get('MILVUS_HOST')
+MILVUS_PORT = os.environ.get('MILVUS_PORT')
+MINIO_ENDPOINT = os.environ.get('MINIO_ENDPOINT')
+MINIO_ACCESS_KEY = os.environ.get('MINIO_ACCESS_KEY')
+MINIO_SECRET_KEY = os.environ.get('MINIO_SECRET_KEY')
+REC_MODEL_PATH = os.environ.get('REC_MODEL_PATH')
 
 detector = MTCNN(steps_threshold=[0.7, 0.8, 0.9], min_face_size=40)
-#milvus = Milvus(host='localhost', port='19530')
 connections.connect(
-    host='localhost',
-    port='19530',
+    host=MILVUS_HOST,
+    port=MILVUS_PORT,
     timeout=100000
 )
-minio_client = Minio(
-    endpoint='localhost:9000',
-    access_key='minioadmin',
-    secret_key='minioadmin',
-    secure=False  # Set to True if using HTTPS
+client = MilvusClient(
+    uri=f"http://{MILVUS_HOST}:{MILVUS_PORT}"
 )
 
-rec_model_path = '/root/eTanuReincarnationLinux/metadata/insightface/models/w600k_mbf.onnx'
+pool_manager = urllib3.PoolManager(
+    num_pools=10,  # Number of pools
+    maxsize=10,  # Maximum size of a pool
+    retries=3,  # Number of retries
+)
+
+minio_client = Minio(
+    endpoint=MINIO_ENDPOINT,
+    access_key=MINIO_ACCESS_KEY,
+    secret_key=MINIO_SECRET_KEY,
+    secure=False,  # Set to True if using HTTPS
+    http_client=pool_manager
+)
+
+rec_model_path = REC_MODEL_PATH
 rec_model = model_zoo.get_model(rec_model_path)
 rec_model.prepare(ctx_id=0)
 
@@ -57,13 +65,11 @@ collection = Collection('face_embeddings')
 collection.load()
 
 
-
-
 def upload_image_to_minio(image_data, bucket_name, content_type, directory_name):
     try:
         # Create BytesIO object from image data
         image_stream = BytesIO(image_data)
-        
+
         # Generate unique object name using uuid4()
         object_name = str(uuid4()) + content_type.replace('image/',
                                                           '.')  # Example: '7f1d18a4-2c0e-47d3-afe1-6d27c3b9392e.png'
@@ -97,6 +103,28 @@ def search_faces_in_milvus(embedding, limit):
     return vector_ids, distances
 
 
+def retrieve_face_vectors(vector_ids):
+    # Perform a query in Milvus to get face_vectors for the given vector_ids
+    res = client.query(
+        collection_name="face_embeddings",
+        filter=f'vector_id in {vector_ids}',
+        output_fields=["vector_id", "face_vector"]
+    )
+
+    # Parse results
+    face_vectors = {}
+    for item in res:
+        vector_id = item['vector_id']
+        face_vector = np.array(item['face_vector'])
+        face_vectors[vector_id] = face_vector
+
+    return face_vectors
+
+
+def calculate_dot_product(embedding1, embedding2):
+    return np.dot(embedding1, embedding2)
+
+
 def convert_image_to_embeddingv2(img, face):
     # Detect faces in the image
     rec_model.get(img, face)
@@ -114,17 +142,31 @@ class SearchView(APIView):
         limit = int(request.POST.get('limit', 5))  # Default limit is 10 if not provided
         user_id = request.POST.get('auth_user_id')
         reload = request.POST.get('reload')
+        search_reason = request.POST.get('reason')
+        reason_data = request.POST.get('reason_data')
         bucket_name = 'history'
+
+        if reason_data:
+            try:
+                reason_data = json.loads(reason_data)
+            except json.JSONDecodeError:
+                return JsonResponse({'error': 'Invalid reason_data format'}, status=400)
 
         if reload == "1":
             image_name = request.POST.get('image_name')
-            image_url = f'http://127.0.0.1:9000/{bucket_name}/{image_name}'
+            image_url = f'http://{MINIO_ENDPOINT}/{bucket_name}/{image_name}'
             response = requests.get(image_url)
             image_data = response.content
         # Read the image file and convert it to an OpenCV format
         else:
             image_file = request.FILES['image']
             image_data = image_file.read()
+
+        user = User.objects.get(id=user_id)
+        account = Account.objects.get(user=user)
+
+        if account.role_id != 'admin' and (search_reason is None or not reason_data):
+            return JsonResponse({'error': 'Основание поиска не заполнено'}, status=400)
 
         nparr = np.frombuffer(image_data, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -155,10 +197,18 @@ class SearchView(APIView):
             # Retrieve metadata for each vector ID
             gallery_objects = Gallery.objects.filter(vector_id__in=vector_ids)
 
-            # Prepare data for response
+            face_vectors = retrieve_face_vectors(vector_ids)
 
-            milvus_results = [{'vector_id': vector_id, 'distance': round(dist, 2)} for vector_id, dist in
-                              zip(vector_ids, distances)]
+            milvus_results = []
+            for vector_id in vector_ids:
+                known_embedding = face_vectors.get(vector_id)
+                if known_embedding is not None:
+                    similarity = calculate_dot_product(embedding, known_embedding)
+                    milvus_results.append({
+                        'vector_id': vector_id,
+                        'similarity': round(similarity*100, 2)
+                    })
+
             metadata_list = [
                 {'vector_id': obj.vector_id, 'iin': obj.personId.iin, 'name': obj.personId.firstname,
                  'surname': obj.personId.surname, 'patronymic': obj.personId.patronymic,
@@ -181,14 +231,47 @@ class SearchView(APIView):
             }
             face_results.append(face_result)
 
-        user = User.objects.get(id=user_id)
-        account = Account.objects.get(user=user)
-        uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/jpg', directory_name=account.id)
-        SearchHistory.objects.create(
+        uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/jpg',
+                                                     directory_name=account.id)
+
+        search_history = SearchHistory.objects.create(
             account=account,
             searchedPhoto=uploaded_object_name,
-            created_at=datetime.now()
+            created_at=datetime.now(),
+            reason=search_reason,
         )
+
+        if account.role_id != 'admin':
+            try:
+                if search_reason == 'CRIMINAL_CASE':
+                    reason_form = CriminalCaseReasonForm(reason_data)
+                elif search_reason == 'INVESTIGATIVE_ORDER':
+                    reason_form = InvestigativeOrderReasonForm(reason_data)
+                elif search_reason == 'PROSECUTOR_INSTRUCTION':
+                    reason_form = ProsecutorInstructionReasonForm(reason_data)
+                elif search_reason == 'INTERNATIONAL_ORDER':
+                    reason_form = InternationalOrderReasonForm(reason_data)
+                elif search_reason == 'AFM_ORDER':
+                    reason_form = AfmOrderReasonForm(reason_data)
+                elif search_reason == 'HEAD_ORDER':
+                    reason_form = HeadOrderReasonForm(reason_data)
+                elif search_reason == 'OPERATIONAL_INSPECTION':
+                    reason_form = OperationalInspectionReasonForm(reason_data)
+                elif search_reason == 'ANALYTICAL_WORK':
+                    reason_form = AnalyticalWorkReasonForm(reason_data)
+                else:
+                    return JsonResponse({'status': 'error', 'message': 'Invalid reason type'}, status=400)
+                if reason_form.is_valid():
+                    reason_instance = reason_form.save(commit=False)
+                    reason_instance.search_history = search_history
+                    reason_instance.save()
+                else:
+                    return JsonResponse({'status': 'error', 'message': reason_form.errors}, status=400)
+            except Exception as e:
+                # Handle exceptions, e.g., log the error and return an error response
+                print(f"An error occurred while saving the reason data: {e}")
+                return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
         return JsonResponse({'faces': face_results,
                              'image_name': uploaded_object_name})
+

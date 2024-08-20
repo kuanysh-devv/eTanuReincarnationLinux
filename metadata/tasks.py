@@ -35,15 +35,21 @@ load_dotenv()
 
 MILVUS_HOST = os.environ.get('MILVUS_HOST')
 MILVUS_PORT = os.environ.get('MILVUS_PORT')
+MINIO_ENDPOINT = os.environ.get('MINIO_ENDPOINT')
+MINIO_ACCESS_KEY = os.environ.get('MINIO_ACCESS_KEY')
+MINIO_SECRET_KEY = os.environ.get('MINIO_SECRET_KEY')
+REC_MODEL_PATH = os.environ.get('REC_MODEL_PATH')
+
+
 client = Milvus(MILVUS_HOST, MILVUS_PORT)
-rec_model_path = '/root/eTanuReincarnationLinux/metadata/insightface/models/w600k_mbf.onnx'
+rec_model_path = REC_MODEL_PATH
 detector = MTCNN(steps_threshold=[0.7, 0.8, 0.9], min_face_size=40)
 rec_model = model_zoo.get_model(rec_model_path)
 rec_model.prepare(ctx_id=0)
 minio_client = Minio(
-    endpoint='192.168.122.110:9000',
-    access_key='minioadmin',
-    secret_key='minioadmin',
+    endpoint=MINIO_ENDPOINT,
+    access_key=MINIO_ACCESS_KEY,
+    secret_key=MINIO_SECRET_KEY,
     secure=False  # Set to True if using HTTPS
 )
 
@@ -199,8 +205,8 @@ def process_image_from_row(row_data, partition_name):
     )
     collection_name = "face_embeddings"
     collection = Collection(collection_name)
-    hex_photo = row_data['photo']
 
+    hex_photo = row_data['photo']
     hex_values = hex_photo.replace('\\x', '').split('\\')
     # Convert hex values to byte array
     image_data = bytearray.fromhex(''.join(hex_values))
