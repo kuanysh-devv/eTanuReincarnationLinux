@@ -40,17 +40,16 @@ MINIO_ACCESS_KEY = os.environ.get('MINIO_ACCESS_KEY')
 MINIO_SECRET_KEY = os.environ.get('MINIO_SECRET_KEY')
 REC_MODEL_PATH = os.environ.get('REC_MODEL_PATH')
 
-
 client = Milvus(MILVUS_HOST, MILVUS_PORT)
-rec_model_path = REC_MODEL_PATH
 detector = MTCNN(steps_threshold=[0.7, 0.8, 0.9], min_face_size=40)
-rec_model = model_zoo.get_model(rec_model_path)
+rec_model = model_zoo.get_model(REC_MODEL_PATH)
 rec_model.prepare(ctx_id=0)
 minio_client = Minio(
     endpoint=MINIO_ENDPOINT,
     access_key=MINIO_ACCESS_KEY,
     secret_key=MINIO_SECRET_KEY,
-    secure=False  # Set to True if using HTTPS
+    secure=True,
+    cert_check=False
 )
 
 
@@ -178,7 +177,9 @@ def process_image(image_path, partition_name):
 
     bucket_name = 'photos'
     directory_name = partition_name
-    uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/png', directory_name=directory_name)
+
+    upload_image_to_minio(image_data, bucket_name, content_type='image/png', directory_name=directory_name)
+
     Person.objects.create(
         iin=None,
         firstname=first_name,
@@ -195,6 +196,7 @@ def process_image(image_path, partition_name):
     print(f"Done: {image_path}")
     collection_name = "face_embeddings"
     client.flush([collection_name])
+
 
 @shared_task
 def process_image_from_row(row_data, partition_name):
@@ -239,7 +241,8 @@ def process_image_from_row(row_data, partition_name):
     reformatted_birthdate = birthdate.strftime('%Y-%m-%d')
     bucket_name = 'photos'
     directory_name = partition_name
-    uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/png',directory_name=directory_name)
+    uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/png',
+                                                 directory_name=directory_name)
     if Person.objects.filter(iin=iin).exists():
         existedPerson = Person.objects.get(iin=iin)
 

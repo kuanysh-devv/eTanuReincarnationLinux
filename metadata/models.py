@@ -40,6 +40,9 @@ class Account(models.Model):
     surname = models.CharField(max_length=255, verbose_name=_("surname"), default="", null=True, blank=True)
     patronymic = models.CharField(max_length=255, verbose_name=_("patronymic"), default="", null=True, blank=True)
     role_id = models.CharField(max_length=50)
+    face_vector_id = models.CharField(max_length=2555, verbose_name=_("Face Vector Id"), null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created at"), null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated at"), null=True, blank=True)
 
     def __str__(self):
         return f"{self.user.username}"

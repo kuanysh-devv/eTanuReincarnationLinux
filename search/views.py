@@ -53,8 +53,8 @@ minio_client = Minio(
     endpoint=MINIO_ENDPOINT,
     access_key=MINIO_ACCESS_KEY,
     secret_key=MINIO_SECRET_KEY,
-    secure=False,  # Set to True if using HTTPS
-    http_client=pool_manager
+    secure=True,  # Set to True if using HTTPS
+    cert_check=False
 )
 
 rec_model_path = REC_MODEL_PATH
@@ -103,10 +103,10 @@ def search_faces_in_milvus(embedding, limit):
     return vector_ids, distances
 
 
-def retrieve_face_vectors(vector_ids):
+def retrieve_face_vectors(vector_ids, collection_name):
     # Perform a query in Milvus to get face_vectors for the given vector_ids
     res = client.query(
-        collection_name="face_embeddings",
+        collection_name=collection_name,
         filter=f'vector_id in {vector_ids}',
         output_fields=["vector_id", "face_vector"]
     )
@@ -144,6 +144,7 @@ class SearchView(APIView):
         reload = request.POST.get('reload')
         search_reason = request.POST.get('reason')
         reason_data = request.POST.get('reason_data')
+        minimum_similarity = request.POST.get('minimum_similarity')
         bucket_name = 'history'
 
         if reason_data:
@@ -154,8 +155,8 @@ class SearchView(APIView):
 
         if reload == "1":
             image_name = request.POST.get('image_name')
-            image_url = f'http://{MINIO_ENDPOINT}/{bucket_name}/{image_name}'
-            response = requests.get(image_url)
+            image_url = f'https://{MINIO_ENDPOINT}/{bucket_name}/{image_name}'
+            response = requests.get(image_url, verify=False)
             image_data = response.content
         # Read the image file and convert it to an OpenCV format
         else:
@@ -167,6 +168,9 @@ class SearchView(APIView):
 
         if account.role_id != 'admin' and (search_reason is None or not reason_data):
             return JsonResponse({'error': 'Основание поиска не заполнено'}, status=400)
+
+        if minimum_similarity is not None and minimum_similarity != 'undefined':
+            minimum_similarity = float(minimum_similarity)
 
         nparr = np.frombuffer(image_data, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -197,22 +201,34 @@ class SearchView(APIView):
             # Retrieve metadata for each vector ID
             gallery_objects = Gallery.objects.filter(vector_id__in=vector_ids)
 
-            face_vectors = retrieve_face_vectors(vector_ids)
+            face_vectors = retrieve_face_vectors(vector_ids, "face_embeddings")
 
             milvus_results = []
             for vector_id in vector_ids:
                 known_embedding = face_vectors.get(vector_id)
                 if known_embedding is not None:
                     similarity = calculate_dot_product(embedding, known_embedding)
-                    milvus_results.append({
-                        'vector_id': vector_id,
-                        'similarity': round(similarity*100, 2)
-                    })
+                    similarity_percentage = round(similarity * 100, 2)
+
+                    # Filter by minimum similarity if provided
+                    if (minimum_similarity is None or minimum_similarity == 'undefined' or
+                            similarity_percentage >= minimum_similarity):
+                        milvus_results.append({
+                            'vector_id': vector_id,
+                            'similarity': similarity_percentage
+                        })
 
             metadata_list = [
-                {'vector_id': obj.vector_id, 'iin': obj.personId.iin, 'name': obj.personId.firstname,
-                 'surname': obj.personId.surname, 'patronymic': obj.personId.patronymic,
-                 'birth_date': obj.personId.birthdate, 'photo': obj.photo} for obj in gallery_objects]
+                {
+                    'vector_id': obj.vector_id,
+                    'iin': obj.personId.iin,
+                    'name': obj.personId.firstname,
+                    'surname': obj.personId.surname,
+                    'patronymic': obj.personId.patronymic,
+                    'birth_date': obj.personId.birthdate,
+                    'photo': obj.photo
+                } for obj in gallery_objects
+            ]
 
             # Associate metadata with Milvus results based on vector ID
             for milvus_result in milvus_results:
@@ -220,8 +236,7 @@ class SearchView(APIView):
                 metadata = next((item for item in metadata_list if item['vector_id'] == vector_id), None)
                 milvus_result['metadata'] = metadata
 
-            keypoints = face.kps
-            keypoints = keypoints.tolist()
+            keypoints = face.kps.tolist()  # Convert keypoints to a list
             bbox = face.bbox
 
             face_result = {
@@ -274,4 +289,3 @@ class SearchView(APIView):
 
         return JsonResponse({'faces': face_results,
                              'image_name': uploaded_object_name})
-

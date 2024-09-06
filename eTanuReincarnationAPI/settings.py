@@ -33,7 +33,8 @@ DEBUG = True
 ALLOWED_HOSTS = [
     '192.168.122.110',
     'localhost',
-    '192.168.8.180'
+    '192.168.8.180',
+    '192.168.52.47',
 ]
 
 # Application definition
@@ -50,6 +51,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'flower',
     'celery',
+    'sslserver',
 ]
 
 MIDDLEWARE = [
@@ -88,9 +90,14 @@ WSGI_APPLICATION = 'eTanuReincarnationAPI.wsgi.application'
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
+    "https://192.168.122.110",
     "http://192.168.122.110:3000",  # Example: Allow requests from this origin
-    'http://192.168.8.211:3000',
+    'http://192.168.52.19:3000',
+    'https://192.168.8.180:3000',
+    "http://localhost:3000",
+    "https://localhost:3000",
+    'https://localhost',
+    'https://192.168.52.47'
 ]
 
 # Database

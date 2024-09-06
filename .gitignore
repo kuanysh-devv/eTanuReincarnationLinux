@@ -6,6 +6,9 @@ embedEtcd.yaml
 standalone_embed.sh
 venv
 .env
+private.key
+public.crt
+server.csr
 
 .idea/*
 eTanuReincarnationAPI/settings.py

@@ -22,5 +22,6 @@ urlpatterns = [
     path('api/v1/getUserInfo/', AccountViewSet.as_view({'post': 'getUserInfo'}), name='getUserInfo'),
     path('api/v1/register/', register, name='register'),
     path('api/v1/search/', SearchView.as_view(), name='process_image'),
-    path('api/v1/authenticate/', authenticate_user, name='authenticate_user')
+    path('api/v1/authenticate/', authenticate_user, name='authenticate_user'),
+    path('api/v1/register-face/', register_account_face, name='register_account_face')
 ]
