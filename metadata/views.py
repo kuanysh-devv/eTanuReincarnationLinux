@@ -242,9 +242,9 @@ class PersonViewSet(viewsets.ModelViewSet):
     def commit(self, request, *args, **kwargs):
         start_time = time.time()
         # image_directory = "/root/eTanuReincarnation/metadata/data/test02"
-        # csv_path = "/root/eTanuReincarnationLinux/metadata/data/from1970to1974.csv"
-        csv_path = "C:/Users/User4/Documents/photos_00-05.csv"
-        partition_name = 'from2000to2005'
+        csv_path = "/root/eTanuReincarnationLinux/metadata/data/photo-06-07.csv"
+        # csv_path = "C:/Users/User4/Documents/photos_00-05.csv"
+        partition_name = 'from2006to2007'
 
         import_embeddings_from_csv(csv_path, partition_name)
 
@@ -285,9 +285,7 @@ def register(request):
         surname = data.get('surname')
         patronymic = data.get('patronymic')
         role_id = data.get('role_id')
-        print(username)
-        print(password)
-        print(role_id)
+    
         if username is not None and password is not None and role_id is not None:
             # Create the user
             user = User.objects.create_user(username=username, password=password)
@@ -301,7 +299,7 @@ def register(request):
                 role_id=role_id
             )
 
-            return JsonResponse({'status': 'Регистрация прошла успешно!'})
+            return JsonResponse({'user_id': user.id})
 
     # Return a failure response if data is missing or request method is not POST
     return JsonResponse({'status': 'Упс что-то пошло не так...'})
