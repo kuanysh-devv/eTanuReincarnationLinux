@@ -5,7 +5,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from django.http import JsonResponse, HttpResponse
 import time
-import torch
 import os
 import uuid
 import sys
@@ -14,11 +13,8 @@ from mtcnn import MTCNN
 from datetime import datetime
 from io import BytesIO
 from uuid import uuid4
-import torchvision.transforms as transforms
 from minio import Minio
 import io
-import torchvision.models as models
-from torchvision.models import ResNet50_Weights
 from PIL import Image
 from pymilvus import Milvus, CollectionSchema, FieldSchema, DataType, Collection, connections, utility
 import base64
@@ -29,7 +25,6 @@ from .models import Person, Gallery
 from .serializers import PersonSerializer
 from dotenv import load_dotenv
 import keras.applications
-from facenet_pytorch import InceptionResnetV1
 
 load_dotenv()
 
