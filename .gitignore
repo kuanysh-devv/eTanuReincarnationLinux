@@ -9,7 +9,7 @@ venv
 private.key
 public.crt
 server.csr
-
+readmefile.txt
 .idea/*
 eTanuReincarnationAPI/settings.py
 # Byte-compiled / optimized / DLL files
