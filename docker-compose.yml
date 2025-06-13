@@ -28,7 +28,7 @@ services:
       - "9001:9001"
       - "9000:9000"
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/minio:/minio_data
+      - /root/volumes/minio:/minio_data
       - /tmp/.minio:/root/.minio
     command: server --console-address ":9001" /minio_data
     healthcheck:

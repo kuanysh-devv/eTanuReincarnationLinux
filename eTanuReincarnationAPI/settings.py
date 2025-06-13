@@ -89,6 +89,8 @@ WSGI_APPLICATION = 'eTanuReincarnationAPI.wsgi.application'
 
 CORS_ALLOW_CREDENTIALS = True
 
+CORS_ALLOW_ALL_ORIGINS = True
+
 CORS_ALLOWED_ORIGINS = [
     "https://192.168.122.110",
     "http://192.168.122.110:3000",  # Example: Allow requests from this origin
