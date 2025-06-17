@@ -1,6 +1,7 @@
 .venv
 metadata/data/
 metadata/insightface/models
+metadata/public_key_afm.pem
 volumes
 embedEtcd.yaml
 standalone_embed.sh

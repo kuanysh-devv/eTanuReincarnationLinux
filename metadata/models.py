@@ -69,6 +69,7 @@ class SearchHistory(models.Model):
     created_at = models.DateTimeField(verbose_name=_("Created at"))
     reason = models.CharField(max_length=500, choices=SearchReason.choices, verbose_name=_("Search Reason"),
                               null=True, blank=True)
+    context = models.CharField(max_length=500, verbose_name=_("Context"), null=True, blank=True)
 
     def __str__(self):
         return f"{self.account.user.username} {self.created_at}"
