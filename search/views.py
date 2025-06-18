@@ -311,7 +311,7 @@ class ISSerSearchView(APIView):
             return JsonResponse({'detail': str(e)}, status=401)
 
         limit = 10
-        user_id = 3 # seradmin user id 1443
+        user_id = 1443 # seradmin user id 1443
         reload = 0
         search_reason = None
         reason_data = None

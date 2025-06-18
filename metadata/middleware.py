@@ -3,7 +3,7 @@ import jwt
 from jwt import ExpiredSignatureError, InvalidTokenError
 import time
 
-PUBLIC_KEY_PATH = "/mnt/c/Users/User4/PycharmProjects/eTanuReincarnationLinux/metadata/public_key_afm.pem"
+PUBLIC_KEY_PATH = "/root/eTanuReincarnationLinux/public_key_afm.pem"
 
 def load_public_key():
     with open(PUBLIC_KEY_PATH, "r") as f:
