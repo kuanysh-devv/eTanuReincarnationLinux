@@ -302,7 +302,6 @@ class ISSerSearchView(APIView):
 
     def post(self, request):
         token = request.COOKIES.get('access_token')
-        print(request.COOKIES)
         if not token:
             return JsonResponse({'detail': 'Authentication credentials were not provided'}, status=401)
 
