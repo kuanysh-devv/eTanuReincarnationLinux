@@ -26,7 +26,6 @@ from django.contrib.auth.models import User
 from datetime import datetime
 from PIL import Image
 import urllib3
-from metadata.middleware import validate_jwt_token
 from metadata.models import *
 from dotenv import load_dotenv
 
@@ -57,7 +56,8 @@ minio_client = Minio(
     endpoint=MINIO_ENDPOINT,
     access_key=MINIO_ACCESS_KEY,
     secret_key=MINIO_SECRET_KEY,
-    secure=False
+    secure=True,
+    cert_check=False
 )
 
 rec_model_path = REC_MODEL_PATH
@@ -142,8 +142,9 @@ class SearchView(APIView):
     @action(detail=False, methods=['post'])
     def post(self, request):
         # Get the uploaded image file and the limit parameter from the request
-        limit = int(request.POST.get('limit', 5))  # Default limit is 10 if not provided
-        user_id = request.POST.get('auth_user_id')
+        jwt_payload = getattr(request, 'jwt_payload', None)
+        limit = int(request.POST.get('limit', 10))  # Default limit is 10 if not provided
+        user_id = User.objects.get(username=jwt_payload.get('sub')).id
         reload = request.POST.get('reload')
         search_reason = request.POST.get('reason')
         reason_data = request.POST.get('reason_data')
@@ -293,172 +294,3 @@ class SearchView(APIView):
         return JsonResponse({'faces': face_results,
                              'image_name': uploaded_object_name})
 
-
-
-@method_decorator(csrf_exempt, name='dispatch')
-class ISSerSearchView(APIView):
-    permission_classes = [AllowAny]
-    parser_classes = [MultiPartParser, FormParser]
-
-    def post(self, request):
-        token = request.COOKIES.get('access_token')
-        if not token:
-            return JsonResponse({'detail': 'Authentication credentials were not provided'}, status=401)
-
-        try:
-            payload = validate_jwt_token(token)
-        except PermissionError as e:
-            return JsonResponse({'detail': str(e)}, status=401)
-
-        limit = 10
-        user_id = 3 # seradmin user id 1443
-        reload = 0
-        search_reason = None
-        reason_data = None
-        minimum_similarity = None
-        bucket_name = 'history'
-        iin = payload.get('sub')
-
-        if reason_data:
-            try:
-                reason_data = json.loads(reason_data)
-            except json.JSONDecodeError:
-                return JsonResponse({'error': 'Invalid reason_data format'}, status=400)
-
-        if reload == "1":
-            image_name = request.POST.get('image_name')
-            image_url = f'http://{MINIO_ENDPOINT}/{bucket_name}/{image_name}'
-            response = requests.get(image_url, verify=False)
-            image_data = response.content
-        # Read the image file and convert it to an OpenCV format
-        else:
-            image_file = request.FILES['image']
-            image_data = image_file.read()
-
-        user = User.objects.get(id=user_id)
-        account = Account.objects.get(user=user)
-
-        if account.role_id != 'admin' and (search_reason is None or not reason_data):
-            return JsonResponse({'error': 'Основание поиска не заполнено'}, status=400)
-
-        if minimum_similarity is not None and minimum_similarity != 'undefined':
-            minimum_similarity = float(minimum_similarity)
-
-        nparr = np.frombuffer(image_data, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        if img is None:
-            return JsonResponse({'error': 'Failed to decode the image'}, status=400)
-
-        # Convert the image to RGB format
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-        # Use MTCNN to detect faces and keypoints in the image
-        faces = detector.detect_faces(img_rgb)
-
-        face_results = []
-        for face in faces:
-            # Convert the face to an embedding
-
-            bbox = face['box']
-            det_score = face['confidence']
-            kps_dict = face['keypoints']
-            kps = np.array([list(kps_dict.values())]).squeeze()
-
-            face = Face(bbox=bbox, kps=kps, det_score=det_score)
-
-            embedding = convert_image_to_embeddingv2(img_rgb, face)
-            # Search for the face in Milvus
-            vector_ids, distances = search_faces_in_milvus(embedding, limit)
-            # Retrieve metadata for each vector ID
-            gallery_objects = Gallery.objects.filter(vector_id__in=vector_ids)
-
-            face_vectors = retrieve_face_vectors(vector_ids, "face_embeddings")
-
-            milvus_results = []
-            for vector_id in vector_ids:
-                known_embedding = face_vectors.get(vector_id)
-                if known_embedding is not None:
-                    similarity = calculate_dot_product(embedding, known_embedding)
-                    similarity_percentage = round(similarity * 100, 2)
-
-                    # Filter by minimum similarity if provided
-                    if (minimum_similarity is None or minimum_similarity == 'undefined' or
-                            similarity_percentage >= minimum_similarity):
-                        milvus_results.append({
-                            'vector_id': vector_id,
-                            'similarity': similarity_percentage
-                        })
-
-            metadata_list = [
-                {
-                    'vector_id': obj.vector_id,
-                    'iin': obj.personId.iin,
-                    'name': obj.personId.firstname,
-                    'surname': obj.personId.surname,
-                    'patronymic': obj.personId.patronymic,
-                    'birth_date': obj.personId.birthdate,
-                    'photo': obj.photo
-                } for obj in gallery_objects
-            ]
-
-            # Associate metadata with Milvus results based on vector ID
-            for milvus_result in milvus_results:
-                vector_id = milvus_result['vector_id']
-                metadata = next((item for item in metadata_list if item['vector_id'] == vector_id), None)
-                milvus_result['metadata'] = metadata
-
-            keypoints = face.kps.tolist()  # Convert keypoints to a list
-            bbox = face.bbox
-
-            face_result = {
-                'bbox': bbox,
-                'keypoints': keypoints,
-                'milvus_results': milvus_results
-            }
-            face_results.append(face_result)
-
-        uploaded_object_name = upload_image_to_minio(image_data, bucket_name, content_type='image/jpg',
-                                                     directory_name=account.id)
-
-        search_history = SearchHistory.objects.create(
-            account=account,
-            searchedPhoto=uploaded_object_name,
-            created_at=datetime.now(),
-            reason=search_reason,
-            context=iin
-        )
-
-        if account.role_id != 'admin':
-            try:
-                if search_reason == 'CRIMINAL_CASE':
-                    reason_form = CriminalCaseReasonForm(reason_data)
-                elif search_reason == 'INVESTIGATIVE_ORDER':
-                    reason_form = InvestigativeOrderReasonForm(reason_data)
-                elif search_reason == 'PROSECUTOR_INSTRUCTION':
-                    reason_form = ProsecutorInstructionReasonForm(reason_data)
-                elif search_reason == 'INTERNATIONAL_ORDER':
-                    reason_form = InternationalOrderReasonForm(reason_data)
-                elif search_reason == 'AFM_ORDER':
-                    reason_form = AfmOrderReasonForm(reason_data)
-                elif search_reason == 'HEAD_ORDER':
-                    reason_form = HeadOrderReasonForm(reason_data)
-                elif search_reason == 'OPERATIONAL_INSPECTION':
-                    reason_form = OperationalInspectionReasonForm(reason_data)
-                elif search_reason == 'ANALYTICAL_WORK':
-                    reason_form = AnalyticalWorkReasonForm(reason_data)
-                else:
-                    return JsonResponse({'status': 'error', 'message': 'Invalid reason type'}, status=400)
-                if reason_form.is_valid():
-                    reason_instance = reason_form.save(commit=False)
-                    reason_instance.search_history = search_history
-                    reason_instance.save()
-                else:
-                    return JsonResponse({'status': 'error', 'message': reason_form.errors}, status=400)
-            except Exception as e:
-                # Handle exceptions, e.g., log the error and return an error response
-                print(f"An error occurred while saving the reason data: {e}")
-                return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
-
-        return JsonResponse({'faces': face_results,
-                             'image_name': uploaded_object_name})

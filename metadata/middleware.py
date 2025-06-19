@@ -1,7 +1,7 @@
-# custom_middleware.py
 import jwt
 from jwt import ExpiredSignatureError, InvalidTokenError
 import time
+from django.http import JsonResponse
 
 PUBLIC_KEY_PATH = "/mnt/c/Users/User4/PycharmProjects/eTanuReincarnationLinux/metadata/public_key_afm.pem"
 
@@ -10,7 +10,6 @@ def load_public_key():
         return f.read()
 
 public_key = load_public_key()
-
 
 class RequestTimeMiddleware:
     def __init__(self, get_response):
@@ -39,7 +38,7 @@ class JWTAuthMiddleware:
             try:
                 payload = jwt.decode(
                     token,
-                    settings.PUBLIC_KEY,
+                    public_key,
                     algorithms=["RS256"],
                     options={"require": ["exp", "iat"]}
                 )
@@ -51,3 +50,4 @@ class JWTAuthMiddleware:
             return JsonResponse({'detail': 'Authentication credentials were not provided'}, status=401)
 
         return self.get_response(request)
+

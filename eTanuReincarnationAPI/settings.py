@@ -31,10 +31,8 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    '192.168.122.110',
+    'etanu.afm.gov.kz',
     'localhost',
-    '192.168.8.180',
-    '192.168.52.47',
 ]
 
 # Application definition
@@ -63,7 +61,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'metadata.middleware.RequestTimeMiddleware',
-    'metadata.middleware.JWTAuthMiddleware'
+    'metadata.middleware.JWTAuthMiddleware',
     'corsheaders.middleware.CorsMiddleware',
 ]
 
@@ -95,14 +93,7 @@ ACCESS_CONTROL_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGINS = [
-    "https://192.168.122.110",
-    "http://192.168.122.110:3000",  # Example: Allow requests from this origin
-    'http://192.168.52.19:3000',
-    'https://192.168.8.180:3000',
-    "http://localhost:3000",
-    "https://localhost:3000",
-    'https://localhost',
-    'https://192.168.52.47'
+    "https://etanu.afm.gov.kz"
 ]
 
 # Database
