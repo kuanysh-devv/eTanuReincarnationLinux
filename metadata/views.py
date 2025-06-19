@@ -645,13 +645,15 @@ class CookieTokenValidateView(APIView):
             # Optionally attach payload to request or return it
             try:
                 user = User.objects.get(username=payload.get('sub'))
+                account = Account.objects.get(user=user)
             except User.DoesNotExist:
                 return Response({"detail": "Пользователь не найден"}, status=status.HTTP_400_BAD_REQUEST)
 
             return Response({
                 "detail": "Token is valid",
                 "payload": payload,
-                "auth_user_id": user.id
+                "auth_user_id": user.id,
+                "role": account.role_id,
             }, status=status.HTTP_200_OK)
 
         except ExpiredSignatureError:

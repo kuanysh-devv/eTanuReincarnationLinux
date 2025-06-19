@@ -2,6 +2,7 @@
 from rest_framework.permissions import BasePermission
 from jwt import ExpiredSignatureError, InvalidTokenError
 import jwt
+from rest_framework.exceptions import AuthenticationFailed
 from django.conf import settings
 from dotenv import load_dotenv
 import os
@@ -15,20 +16,20 @@ def load_public_key():
         return f.read()
 
 public_key = load_public_key()
-# 750127450079
+
 
 class JWTTokenFromRequestPermission(BasePermission):
     def has_permission(self, request, view):
         auth_header = request.headers.get('Authorization')
 
         if not auth_header or not auth_header.startswith('Bearer '):
-            return False
+            raise AuthenticationFailed("Authorization header missing or invalid format")
 
         try:
             token = auth_header.split(' ')[1]
         except IndexError:
-            return False
-        print(token)
+            raise AuthenticationFailed("Malformed Authorization header")
+
         try:
             payload = jwt.decode(
                 token,
@@ -38,5 +39,7 @@ class JWTTokenFromRequestPermission(BasePermission):
             )
             request.jwt_payload = payload
             return True
-        except (ExpiredSignatureError, InvalidTokenError):
-            return False
+        except ExpiredSignatureError:
+            raise AuthenticationFailed("Token has expired")
+        except InvalidTokenError:
+            raise AuthenticationFailed("Invalid token")
