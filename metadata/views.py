@@ -73,8 +73,7 @@ minio_client = Minio(
     endpoint=MINIO_ENDPOINT,
     access_key=MINIO_ACCESS_KEY,
     secret_key=MINIO_SECRET_KEY,
-    secure=True,
-    cert_check=False
+    secure=False
 )
 
 PUBLIC_KEY_PATH = os.getenv("PUBLIC_KEY_PATH")
