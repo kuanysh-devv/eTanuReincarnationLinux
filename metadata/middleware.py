@@ -1,9 +1,13 @@
 import jwt
 from jwt import ExpiredSignatureError, InvalidTokenError
 import time
+from dotenv import load_dotenv
+import os
 from django.http import JsonResponse
 
-PUBLIC_KEY_PATH = "/mnt/c/Users/User4/PycharmProjects/eTanuReincarnationLinux/metadata/public_key_afm.pem"
+load_dotenv()
+
+PUBLIC_KEY_PATH = os.getenv("PUBLIC_KEY_PATH")
 
 def load_public_key():
     with open(PUBLIC_KEY_PATH, "r") as f:
