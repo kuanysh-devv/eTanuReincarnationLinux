@@ -165,7 +165,7 @@ class SearchView(APIView):
 
         if reload == "1":
             image_name = request.POST.get('image_name')
-            image_url = f'http://{MINIO_ENDPOINT}/{bucket_name}/{image_name}'
+            image_url = f'https://{MINIO_ENDPOINT}/{bucket_name}/{image_name}'
             response = requests.get(image_url, verify=False)
             image_data = response.content
         # Read the image file and convert it to an OpenCV format
