@@ -1,34 +1,40 @@
 import os
-from django.shortcuts import render
 import cv2
-from django.apps import apps
-from mtcnn import MTCNN
-from pymilvus import Milvus, DataType, Collection, connections, MilvusClient
-import numpy as np
 import json
-from django.views.decorators.csrf import csrf_exempt
-from rest_framework.permissions import AllowAny
-from django.utils.decorators import method_decorator
-from rest_framework.views import APIView
-from minio import Minio
+import requests
+import numpy as np
+import urllib3
 from io import BytesIO
 from uuid import uuid4
-import requests
-from metadata.permissions import IsJWTAuthenticated
-from .forms import *
+from datetime import datetime
+from PIL import Image
+
+from django.apps import apps
+from django.shortcuts import render
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django.contrib.auth.models import User
+
+from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.decorators import permission_classes, action
+
+from minio import Minio
+from mtcnn import MTCNN
+from pymilvus import Milvus, DataType, Collection, connections, MilvusClient
+
 import insightface
 from insightface.app.common import Face
 from insightface.model_zoo import model_zoo
-from django.http import JsonResponse
-from rest_framework.decorators import permission_classes, action
-from rest_framework.permissions import IsAuthenticated
-from django.contrib.auth.models import User
-from datetime import datetime
-from PIL import Image
-import urllib3
-from metadata.models import *
+
 from dotenv import load_dotenv
+
+from .forms import *
+from metadata.models import *
+from metadata.permissions import JWTTokenFromRequestPermission
+
 
 MILVUS_HOST = os.environ.get('MILVUS_HOST')
 MILVUS_PORT = os.environ.get('MILVUS_PORT')
@@ -137,17 +143,14 @@ def convert_image_to_embeddingv2(img, face):
 
 
 class SearchView(APIView):
-    permission_classes = [IsJWTAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [JWTTokenFromRequestPermission]
 
     @action(detail=False, methods=['post'])
     def post(self, request):
         # Get the uploaded image file and the limit parameter from the request
-        jwt_payload = getattr(request, 'jwt_payload', None)
         limit = int(request.POST.get('limit', 10))  # Default limit is 10 if not provided
-        user_id = User.objects.get(username=jwt_payload.get('sub')).id
-        if user_id is None:
-            return JsonResponse({'error': 'Не найден аккаунт с иин ' + str(jwt_payload.get('sub'))}, status=400)
+        user_id = request.POST.get('auth_user_id')
         reload = request.POST.get('reload')
         search_reason = request.POST.get('reason')
         reason_data = request.POST.get('reason_data')

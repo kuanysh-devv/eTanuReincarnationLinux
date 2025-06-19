@@ -1,38 +1,59 @@
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action
-from django.http import JsonResponse
-import time
-from minio import Minio
-import numpy as np
-from rest_framework.parsers import MultiPartParser
-from .tasks import process_image, process_image_from_row, convert_image_to_embeddingv2, upload_image_to_minio
-from django.shortcuts import get_object_or_404
-from django.utils.decorators import method_decorator
-from rest_framework import viewsets, status, pagination
-from django.contrib.auth.models import User
-from mtcnn import MTCNN
-import json
 import os
-from io import BytesIO
-import uuid
 import cv2
+import csv
+import time
+import json
+import uuid
+import base64
+import numpy as np
+
+from io import BytesIO
+from PIL import Image
+
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+from django.views.decorators.csrf import csrf_exempt
+from django.core.exceptions import ObjectDoesNotExist
+from django.utils.decorators import method_decorator
+from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
+
+from rest_framework import viewsets, status, pagination
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, JSONParser
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.decorators import action
+
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from jwt import ExpiredSignatureError, InvalidTokenError
+import jwt
+
+from minio import Minio
+from mtcnn import MTCNN
+from dotenv import load_dotenv
+
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing.image import img_to_array
+
+from pymilvus import (
+    Milvus, CollectionSchema, FieldSchema, DataType,
+    Collection, connections, utility
+)
+
 from insightface.app.common import Face
 from insightface.model_zoo import model_zoo
-import csv
-from django.contrib.auth import authenticate
-from django.views.decorators.csrf import csrf_exempt
-from rest_framework_simplejwt.views import TokenObtainPairView
-from dotenv import load_dotenv
-from PIL import Image
-from permissions import IsJWTAuthenticated
-from rest_framework_simplejwt.tokens import RefreshToken
-from tensorflow.keras.models import load_model
-from pymilvus import Milvus, CollectionSchema, FieldSchema, DataType, Collection, connections, utility
-import base64
-from search.views import retrieve_face_vectors, calculate_dot_product
-from tensorflow.keras.preprocessing.image import img_to_array
+
 from .models import Person, Account, SearchHistory, Gallery
 from .serializers import PersonSerializer, AccountSerializer, CustomTokenObtainPairSerializer
+from .tasks import (
+    process_image, process_image_from_row,
+    convert_image_to_embeddingv2, upload_image_to_minio
+)
+from .permissions import JWTTokenFromRequestPermission
+from search.views import retrieve_face_vectors, calculate_dot_product
 
 load_dotenv()
 
@@ -55,6 +76,14 @@ minio_client = Minio(
     secure=True,
     cert_check=False
 )
+
+PUBLIC_KEY_PATH = os.getenv("PUBLIC_KEY_PATH")
+
+def load_public_key():
+    with open(PUBLIC_KEY_PATH, "r") as f:
+        return f.read()
+
+public_key = load_public_key()
 
 
 def preprocess_frame(frame):
@@ -237,7 +266,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 class PersonViewSet(viewsets.ModelViewSet):
     queryset = Person.objects.all()
     serializer_class = PersonSerializer
-    permission_classes = [IsJWTAuthenticated]
+    permission_classes = [JWTTokenFromRequestPermission]
 
     @action(detail=False, methods=['get'])
     def commit(self, request, *args, **kwargs):
@@ -552,17 +581,14 @@ class HistoryPagination(pagination.PageNumberPagination):
 class AccountViewSet(viewsets.ModelViewSet):
     queryset = Account.objects.all()
     serializer_class = AccountSerializer
-    parser_classes = [MultiPartParser]
-    permission_classes = [IsJWTAuthenticated]
+    permission_classes = [JWTTokenFromRequestPermission]
+    parser_classes = [MultiPartParser, JSONParser]
 
     @action(detail=False, methods=['post'])
     def getUserInfo(self, request, *args, **kwargs):
         user_data = {}
         if request.method == 'POST':
-            jwt_payload = getattr(request, 'jwt_payload', None)
-            user_id = User.objects.get(username=jwt_payload.get('sub')).id
-            if user_id is None:
-                return JsonResponse({'error': 'Не найден аккаунт с иин ' + str(jwt_payload.get('sub'))}, status=400)
+            user_id = request.data.get('auth_user_id')
             user = User.objects.get(id=user_id)
             account = Account.objects.get(user=user)
             last_three_history = SearchHistory.objects.filter(account=account).order_by('-created_at')[:3]
@@ -598,3 +624,37 @@ class AccountViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CookieTokenValidateView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        access_token = request.data.get("access_token")
+
+        if not access_token:
+            return Response({"detail": "No access token provided"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            payload = jwt.decode(
+                access_token,
+                public_key,
+                algorithms=["RS256"],
+                options={"require": ["exp"]}
+            )
+            # Optionally attach payload to request or return it
+            try:
+                user = User.objects.get(username=payload.get('sub'))
+            except User.DoesNotExist:
+                return Response({"detail": "Пользователь не найден"}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({
+                "detail": "Token is valid",
+                "payload": payload,
+                "auth_user_id": user.id
+            }, status=status.HTTP_200_OK)
+
+        except ExpiredSignatureError:
+            return Response({"detail": "Token expired"}, status=status.HTTP_401_UNAUTHORIZED)
+        except InvalidTokenError:
+            return Response({"detail": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
