@@ -27,31 +27,24 @@ class RequestTimeMiddleware:
         return response
 
 
-# class JWTAuthMiddleware:
-#     def __init__(self, get_response):
-#         self.get_response = get_response
-#
-#     def __call__(self, request):
-#         # Skip auth for login/refresh/verify endpoints
-#         if request.path.startswith("/api/v1/login/") or \
-#            request.path.startswith("/api/v1/token/"):
-#             return self.get_response(request)
-#
-#         token = request.COOKIES.get('access_token')
-#         if token:
-#             try:
-#                 payload = jwt.decode(
-#                     token,
-#                     public_key,
-#                     algorithms=["RS256"],
-#                     options={"require": ["exp", "iat"]}
-#                 )
-#                 request.jwt_payload = payload  # Optional: for use in views
-#             except (ExpiredSignatureError, InvalidTokenError):
-#                 return JsonResponse({'detail': 'Invalid or expired token'}, status=401)
-#
-#         else:
-#             return JsonResponse({'detail': 'Authentication credentials were not provided'}, status=401)
-#
-#         return self.get_response(request)
+class CookieJWTMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        access_token = request.COOKIES.get("access_token")
+        if access_token:
+            try:
+                payload = decode(
+                    access_token,
+                    public_key,
+                    algorithms=["RS256"],
+                    options={"require": ["exp"]}
+                )
+                request.jwt_payload = payload
+            except ExpiredSignatureError:
+                return JsonResponse({"detail": "Token expired"}, status=401)
+            except InvalidTokenError:
+                return JsonResponse({"detail": "Invalid token"}, status=401)
+        return self.get_response(request)
 

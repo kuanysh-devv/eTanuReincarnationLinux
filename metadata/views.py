@@ -24,6 +24,7 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework_simplejwt.views import TokenObtainPairView
 from dotenv import load_dotenv
 from PIL import Image
+from permissions import IsJWTAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from tensorflow.keras.models import load_model
 from pymilvus import Milvus, CollectionSchema, FieldSchema, DataType, Collection, connections, utility
@@ -236,7 +237,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 class PersonViewSet(viewsets.ModelViewSet):
     queryset = Person.objects.all()
     serializer_class = PersonSerializer
-    permission_classes = (IsAuthenticated,)
+    permission_classes = [IsJWTAuthenticated]
 
     @action(detail=False, methods=['get'])
     def commit(self, request, *args, **kwargs):
@@ -552,14 +553,16 @@ class AccountViewSet(viewsets.ModelViewSet):
     queryset = Account.objects.all()
     serializer_class = AccountSerializer
     parser_classes = [MultiPartParser]
-    permission_classes = (IsAuthenticated,)
+    permission_classes = [IsJWTAuthenticated]
 
     @action(detail=False, methods=['post'])
     def getUserInfo(self, request, *args, **kwargs):
         user_data = {}
         if request.method == 'POST':
-            data = json.loads(request.body.decode('utf-8'))
-            user_id = data.get('auth_user_id')
+            jwt_payload = getattr(request, 'jwt_payload', None)
+            user_id = User.objects.get(username=jwt_payload.get('sub')).id
+            if user_id is None:
+                return JsonResponse({'error': 'Не найден аккаунт с иин ' + str(jwt_payload.get('sub'))}, status=400)
             user = User.objects.get(id=user_id)
             account = Account.objects.get(user=user)
             last_three_history = SearchHistory.objects.filter(account=account).order_by('-created_at')[:3]

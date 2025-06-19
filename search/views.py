@@ -14,6 +14,7 @@ from minio import Minio
 from io import BytesIO
 from uuid import uuid4
 import requests
+from metadata.permissions import IsJWTAuthenticated
 from .forms import *
 from rest_framework.parsers import MultiPartParser, FormParser
 import insightface
@@ -136,7 +137,7 @@ def convert_image_to_embeddingv2(img, face):
 
 
 class SearchView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsJWTAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
     @action(detail=False, methods=['post'])
@@ -145,6 +146,8 @@ class SearchView(APIView):
         jwt_payload = getattr(request, 'jwt_payload', None)
         limit = int(request.POST.get('limit', 10))  # Default limit is 10 if not provided
         user_id = User.objects.get(username=jwt_payload.get('sub')).id
+        if user_id is None:
+            return JsonResponse({'error': 'Не найден аккаунт с иин ' + str(jwt_payload.get('sub'))}, status=400)
         reload = request.POST.get('reload')
         search_reason = request.POST.get('reason')
         reason_data = request.POST.get('reason_data')
