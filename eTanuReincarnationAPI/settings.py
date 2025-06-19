@@ -33,6 +33,7 @@ DEBUG = True
 ALLOWED_HOSTS = [
     'etanu.afm.gov.kz',
     'localhost',
+    '192.168.122.110'
 ]
 
 # Application definition
