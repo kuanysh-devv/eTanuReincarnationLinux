@@ -34,7 +34,8 @@ ALLOWED_HOSTS = [
     'etanu.afm.gov.kz',
     'localhost:3000',
     '192.168.122.110',
-    '192.168.22.210:3000'
+    '192.168.22.210:3000',
+    'localhost'
 ]
 
 # Application definition
@@ -96,12 +97,8 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     "https://etanu.afm.gov.kz",
     "http://localhost:3000",
-    "http://192.168.22.210:3000"
+    "http://192.168.22.210:3000",
     "http://192.168.22.210",
-    "192.168.22.210:3000",
-    "192.168.22.210",
-    "localhost:3000",
-    "localhost"
 ]
 
 # Database

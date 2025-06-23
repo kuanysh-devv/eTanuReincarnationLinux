@@ -148,12 +148,12 @@ class SearchView(APIView):
     @action(detail=False, methods=['post'])
     def post(self, request):
         # Get the uploaded image file and the limit parameter from the request
-        limit = int(request.POST.get('limit', 10))  # Default limit is 10 if not provided
-        user_id = request.POST.get('auth_user_id')
-        reload = request.POST.get('reload')
-        search_reason = request.POST.get('reason')
-        reason_data = request.POST.get('reason_data')
-        minimum_similarity = request.POST.get('minimum_similarity')
+        limit = int(request.data.get('limit', 10))  # Default limit is 10 if not provided
+        user_id = request.data.get('auth_user_id')
+        reload = request.data.get('reload')
+        search_reason = request.data.get('reason')
+        reason_data = request.data.get('reason_data')
+        minimum_similarity = request.data.get('minimum_similarity')
         bucket_name = 'history'
 
         if reason_data:
