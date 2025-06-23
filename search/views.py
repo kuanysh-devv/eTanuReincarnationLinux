@@ -17,7 +17,7 @@ from django.utils.decorators import method_decorator
 from django.contrib.auth.models import User
 
 from rest_framework.views import APIView
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.decorators import permission_classes, action
 
@@ -142,7 +142,7 @@ def convert_image_to_embeddingv2(img, face):
 
 
 class SearchView(APIView):
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     permission_classes = [JWTTokenFromRequestPermission]
 
     @action(detail=False, methods=['post'])
