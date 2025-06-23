@@ -35,7 +35,8 @@ class JWTTokenFromRequestPermission(BasePermission):
                 token,
                 public_key,
                 algorithms=["RS256"],
-                options={"require": ["exp"]}
+                options={"require": ["exp", "iat"]},
+                leeway=30
             )
             request.jwt_payload = payload
             return True

@@ -633,13 +633,14 @@ class CookieTokenValidateView(APIView):
 
         if not access_token:
             return Response({"detail": "No access token provided"}, status=status.HTTP_401_UNAUTHORIZED)
-
+        
         try:
             payload = jwt.decode(
                 access_token,
                 public_key,
                 algorithms=["RS256"],
-                options={"require": ["exp"]}
+                options={"require": ["exp", "iat"]},
+                leeway=30
             )
             # Optionally attach payload to request or return it
             try:
@@ -656,6 +657,6 @@ class CookieTokenValidateView(APIView):
             }, status=status.HTTP_200_OK)
 
         except ExpiredSignatureError:
-            return Response({"detail": "Token expired"}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({"detail": "Expired token"}, status=status.HTTP_401_UNAUTHORIZED)
         except InvalidTokenError:
             return Response({"detail": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
