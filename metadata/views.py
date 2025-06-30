@@ -643,11 +643,8 @@ class CookieTokenValidateView(APIView):
                 leeway=30
             )
             # Optionally attach payload to request or return it
-            try:
-                user = User.objects.get(username=payload.get('sub'))
-                account = Account.objects.get(user=user)
-            except (User.DoesNotExist, Account.DoesNotExist):
-                return Response({"detail": "Пользователь не найден"}, status=status.HTTP_400_BAD_REQUEST)
+            user, _ = User.objects.get_or_create(username=username)
+            account, _ = Account.objects.get_or_create(user=user, defaults={'role_id': 'user'})
 
             return Response({
                 "detail": "Token is valid",
