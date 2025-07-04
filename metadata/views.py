@@ -643,7 +643,7 @@ class CookieTokenValidateView(APIView):
                 leeway=30
             )
             # Optionally attach payload to request or return it
-            user, _ = User.objects.get_or_create(username=username)
+            user, _ = User.objects.get_or_create(username=payload.get('sub'))
             account, _ = Account.objects.get_or_create(user=user, defaults={'role_id': 'user'})
 
             return Response({
